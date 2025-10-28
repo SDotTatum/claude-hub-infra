@@ -1,0 +1,116 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: block-cloud-metadata
+  namespace: claude-hub
+  labels:
+    app.kubernetes.io/name: network-policy
+    app.kubernetes.io/component: security
+    app.kubernetes.io/part-of: claude-hub
+spec:
+  podSelector: {}  # Apply to all pods in namespace
+  policyTypes:
+  - Egress
+  egress:
+  # Allow DNS resolution
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+
+  # Allow Kubernetes API server access
+  - to:
+    - namespaceSelector: {}
+      podSelector:
+        matchLabels:
+          component: kube-apiserver
+    ports:
+    - protocol: TCP
+      port: 443
+    - protocol: TCP
+      port: 6443
+
+  # Allow internal cluster communication
+  - to:
+    - podSelector: {}
+    ports:
+    - protocol: TCP
+      port: 8181  # Backend server
+    - protocol: TCP
+      port: 9051  # MCP server
+    - protocol: TCP
+      port: 9052  # Agents server
+    - protocol: TCP
+      port: 5432  # PostgreSQL
+    - protocol: TCP
+      port: 6379  # Redis
+
+  # Allow HTTPS to external services (but not IMDS)
+  - to:
+    - ipBlock:
+        cidr: 0.0.0.0/0
+        except:
+        - 169.254.169.254/32  # Block AWS/GCP/Azure metadata endpoint
+        - 169.254.0.0/16      # Block entire link-local range for safety
+        - 10.0.0.0/8          # Block private networks (unless explicitly allowed above)
+        - 172.16.0.0/12
+        - 192.168.0.0/16
+    ports:
+    - protocol: TCP
+      port: 443  # HTTPS only for external
+
+  # Allow HTTP/HTTPS to public internet (for web scraping, API calls)
+  - to:
+    - ipBlock:
+        cidr: 0.0.0.0/0
+        except:
+        - 169.254.169.254/32  # Block IMDS
+        - 169.254.0.0/16      # Block link-local
+    ports:
+    - protocol: TCP
+      port: 80   # HTTP
+    - protocol: TCP
+      port: 443  # HTTPS
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-backend-to-k8s-api
+  namespace: claude-hub
+  labels:
+    app.kubernetes.io/name: network-policy
+    app.kubernetes.io/component: security
+    app.kubernetes.io/part-of: claude-hub
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: backend
+      app.kubernetes.io/component: api
+  policyTypes:
+  - Egress
+  egress:
+  # Allow Kubernetes API server (typically runs on 443 or 6443)
+  # This is needed for kubectl commands
+  - to:
+    - ipBlock:
+        cidr: 0.0.0.0/0  # K8s API can be anywhere
+    ports:
+    - protocol: TCP
+      port: 443
+    - protocol: TCP
+      port: 6443
+
+  # Allow DNS
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53

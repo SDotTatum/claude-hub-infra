@@ -10,6 +10,9 @@ resources:
   - rbac/backend-clusterrole.yaml
   - rbac/backend-clusterrolebinding.yaml
 
+  # Network Security
+  - networkpolicy/block-imds.yaml
+
 labels:
   - pairs:
       app.kubernetes.io/part-of: claude-hub
