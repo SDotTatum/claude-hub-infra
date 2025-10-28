@@ -29,7 +29,26 @@ jobs:
       - name: Validate K8s manifests against security policies
         run: |
           echo "📋 Running Conftest policy checks..."
-          conftest test k8s/base -p policies/ --output table
+          conftest test k8s/base -p policies/security.rego --output table
+
+      - name: Validate production manifests against stricter policies
+        run: |
+          echo "🔒 Running production policy checks..."
+          if [ -d "k8s/overlays/prod" ]; then
+            conftest test k8s/overlays/prod -p policies/production.rego --output table || {
+              echo "❌ Production policies failed"
+              echo "Production deployments must meet stricter security requirements:"
+              echo "  - SHA256 digests (not version tags)"
+              echo "  - All security context fields set"
+              echo "  - Resource limits/requests defined"
+              echo "  - Liveness/readiness probes"
+              echo "  - Replicas >= 2 for HA"
+              exit 1
+            }
+            echo "✅ Production policies passed"
+          else
+            echo "⚠️  No prod overlay found, skipping production policies"
+          fi
 
       - name: Check for :latest tags
         run: |
