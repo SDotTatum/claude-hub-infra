@@ -1,0 +1,19 @@
+# ArgoCD Installation for claude-hub-dev cluster
+# This uses the official ArgoCD installation manifest with minimal modifications
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: argocd
+
+---
+# Use official ArgoCD installation
+# To update, fetch latest from:
+# kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+
+# For now, users should install ArgoCD via:
+#   kubectl create namespace argocd
+#   kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/v2.9.3/manifests/install.yaml
+
+# Or use the script:
+#   scripts/install-argocd.sh

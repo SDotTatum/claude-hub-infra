@@ -1,0 +1,46 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: claude-hub-prod
+  namespace: argocd
+  labels:
+    environment: prod
+    app.kubernetes.io/name: claude-hub
+    app.kubernetes.io/part-of: claude-hub
+  finalizers:
+  - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+
+  # Source repository
+  source:
+    repoURL: https://github.com/SDotTatum/claude-hub-infra.git
+    targetRevision: HEAD  # In production, pin to specific tag (e.g., v1.0.0)
+    path: k8s/overlays/prod
+
+  # Destination cluster
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: claude-hub
+
+  # Sync policy - MANUAL for production
+  syncPolicy:
+    # No automated sync in production - require manual approval
+    # automated:
+    #   prune: false
+    #   selfHeal: false
+
+    syncOptions:
+    - CreateNamespace=true
+    - PrunePropagationPolicy=foreground
+    - PruneLast=true
+
+    retry:
+      limit: 3
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 5m
+
+  # Health assessment
+  revisionHistoryLimit: 20

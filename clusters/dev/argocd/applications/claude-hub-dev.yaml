@@ -1,0 +1,52 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: claude-hub-dev
+  namespace: argocd
+  labels:
+    environment: dev
+    app.kubernetes.io/name: claude-hub
+    app.kubernetes.io/part-of: claude-hub
+  finalizers:
+  - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+
+  # Source repository
+  source:
+    repoURL: https://github.com/SDotTatum/claude-hub-infra.git
+    targetRevision: HEAD
+    path: k8s/overlays/dev
+
+  # Destination cluster
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: claude-hub
+
+  # Sync policy
+  syncPolicy:
+    automated:
+      prune: true       # Remove resources not in git
+      selfHeal: true    # Automatically sync on drift detection
+      allowEmpty: false # Prevent accidental deletion of all resources
+    syncOptions:
+    - CreateNamespace=true  # Auto-create namespace if missing
+    - PrunePropagationPolicy=foreground
+    - PruneLast=true  # Prune resources after new resources are healthy
+
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+
+  # Ignore differences (if any resources are managed outside ArgoCD)
+  ignoreDifferences:
+  - group: apps
+    kind: Deployment
+    jsonPointers:
+    - /spec/replicas  # Allow HPA to manage replicas
+
+  # Health assessment
+  revisionHistoryLimit: 10
