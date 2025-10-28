@@ -1,0 +1,16 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: backend-k8s-read-binding
+  labels:
+    app.kubernetes.io/name: backend
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/part-of: claude-hub
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: backend-k8s-read
+subjects:
+  - kind: ServiceAccount
+    name: backend-sa
+    namespace: claude-hub

@@ -1,0 +1,33 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: backend-k8s-read
+  labels:
+    app.kubernetes.io/name: backend
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/part-of: claude-hub
+rules:
+  # Pod read access
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+
+  # Pod logs access
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+
+  # Pod exec access (for shell)
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create"]
+
+  # Pod status
+  - apiGroups: [""]
+    resources: ["pods/status"]
+    verbs: ["get"]
+
+  # Namespace read (to list available namespaces)
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list"]

@@ -1,0 +1,106 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: claude-hub-backend
+  namespace: claude-hub
+  labels:
+    app.kubernetes.io/name: backend
+    app.kubernetes.io/component: api
+    app.kubernetes.io/part-of: claude-hub
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: backend
+      app.kubernetes.io/component: api
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: backend
+        app.kubernetes.io/component: api
+        app.kubernetes.io/part-of: claude-hub
+    spec:
+      serviceAccountName: backend-sa
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: backend
+        image: ghcr.io/sdottatum/claude-hub-backend:v1.0.0
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 9181
+          name: http
+          protocol: TCP
+        env:
+        - name: ARCHON_SERVER_PORT
+          value: "9181"
+        - name: LOG_LEVEL
+          value: "INFO"
+        - name: SERVICE_DISCOVERY_MODE
+          value: "kubernetes"
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          runAsNonRoot: true
+          readOnlyRootFilesystem: true
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 9181
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 9181
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: home
+          mountPath: /home/appuser
+      volumes:
+      - name: tmp
+        emptyDir:
+          sizeLimit: 1Gi
+      - name: home
+        emptyDir:
+          sizeLimit: 500Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: claude-hub-backend
+  namespace: claude-hub
+  labels:
+    app.kubernetes.io/name: backend
+    app.kubernetes.io/component: api
+    app.kubernetes.io/part-of: claude-hub
+spec:
+  type: ClusterIP
+  ports:
+  - port: 9181
+    targetPort: 9181
+    protocol: TCP
+    name: http
+  selector:
+    app.kubernetes.io/name: backend
+    app.kubernetes.io/component: api
