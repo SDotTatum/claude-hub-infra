@@ -1,0 +1,128 @@
+name: Infrastructure CI
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'k8s/**'
+      - 'policies/**'
+      - 'terraform/**'
+      - '.github/workflows/**'
+  push:
+    branches: [main]
+
+jobs:
+  policy-check:
+    name: Security Policy Validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Conftest
+        run: |
+          wget https://github.com/open-policy-agent/conftest/releases/download/v0.49.1/conftest_0.49.1_Linux_x86_64.tar.gz
+          tar xzf conftest_0.49.1_Linux_x86_64.tar.gz
+          sudo mv conftest /usr/local/bin/
+          conftest --version
+
+      - name: Validate K8s manifests against security policies
+        run: |
+          echo "📋 Running Conftest policy checks..."
+          conftest test k8s/base -p policies/ --output table
+
+      - name: Check for :latest tags
+        run: |
+          echo "🔍 Checking for :latest tags..."
+          if grep -r ":latest" k8s/base k8s/overlays; then
+            echo "❌ Found :latest tags in manifests"
+            exit 1
+          else
+            echo "✅ No :latest tags found"
+          fi
+
+      - name: Check for runAsNonRoot
+        run: |
+          echo "🔍 Checking for runAsNonRoot..."
+          FILES=$(find k8s/base k8s/overlays -name "*.yaml" -type f)
+          MISSING=0
+          for file in $FILES; do
+            if grep -q "kind: Deployment" "$file"; then
+              if ! grep -q "runAsNonRoot: true" "$file"; then
+                echo "❌ Missing runAsNonRoot in $file"
+                MISSING=$((MISSING + 1))
+              fi
+            fi
+          done
+          if [ $MISSING -gt 0 ]; then
+            echo "❌ Found $MISSING deployments without runAsNonRoot"
+            exit 1
+          else
+            echo "✅ All deployments have runAsNonRoot"
+          fi
+
+  kustomize-build:
+    name: Kustomize Build Test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        overlay: [dev, staging, prod]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Kustomize
+        run: |
+          curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
+          sudo mv kustomize /usr/local/bin/
+          kustomize version
+
+      - name: Build ${{ matrix.overlay }} overlay
+        run: |
+          echo "🏗️ Building ${{ matrix.overlay }} overlay..."
+          kustomize build k8s/overlays/${{ matrix.overlay }} > /tmp/manifests.yaml
+          echo "✅ Build successful"
+
+      - name: Validate YAML syntax
+        run: |
+          echo "📝 Validating YAML syntax..."
+          python3 -c "import yaml, sys; yaml.safe_load_all(open('/tmp/manifests.yaml'))" || exit 1
+          echo "✅ YAML syntax valid"
+
+  kubernetes-validate:
+    name: Kubernetes Schema Validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'v1.28.0'
+
+      - name: Validate against Kubernetes schema
+        run: |
+          echo "🔍 Validating Kubernetes manifests..."
+          find k8s/base -name "*.yaml" -type f | while read file; do
+            echo "Validating $file..."
+            kubectl apply --dry-run=client -f "$file" || exit 1
+          done
+          echo "✅ All manifests are valid"
+
+  notify:
+    name: Notify on completion
+    runs-on: ubuntu-latest
+    needs: [policy-check, kustomize-build, kubernetes-validate]
+    if: always()
+    steps:
+      - name: Check results
+        run: |
+          if [ "${{ needs.policy-check.result }}" == "success" ] && \
+             [ "${{ needs.kustomize-build.result }}" == "success" ] && \
+             [ "${{ needs.kubernetes-validate.result }}" == "success" ]; then
+            echo "✅ All checks passed!"
+          else
+            echo "❌ Some checks failed"
+            exit 1
+          fi

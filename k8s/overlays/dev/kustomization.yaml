@@ -1,0 +1,12 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+bases:
+  - ../../base
+
+namespace: claude-hub
+
+commonLabels:
+  environment: dev
+
+# Dev-specific patches go here
